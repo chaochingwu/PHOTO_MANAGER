@@ -1,11 +1,11 @@
 
-name: Build PHOTO_MANAGER V1.5
+name: Build PHOTO_MANAGER V1.5a
 
 on:
   workflow_dispatch:
   push:
     paths:
-      - PHOTO_MANAGER_V1.5_REBUILD_SOURCE.zip
+      - PHOTO_MANAGER_V1.5a_SOURCE.zip
       - .github/workflows/build-windows.yml
 
 jobs:
@@ -27,24 +27,21 @@ jobs:
 
       - name: Extract source
         run: |
-          Expand-Archive PHOTO_MANAGER_V1.5_REBUILD_SOURCE.zip -DestinationPath source -Force
-
-      - name: Normalize Windows test paths
-        working-directory: source/PHOTO_MANAGER_V1.5
-        run: |
-          python -c "from pathlib import Path; p=Path('test_library.py'); s=p.read_text(encoding='utf-8'); s=s.replace('p=Path(t);', 'p=Path(t).resolve();'); s=s.replace('==old;', '==old.resolve();'); p.write_text(s, encoding='utf-8')"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Expand-Archive PHOTO_MANAGER_V1.5a_SOURCE.zip -DestinationPath source -Force
 
       - name: Install dependencies
-        working-directory: source/PHOTO_MANAGER_V1.5
+        working-directory: source/PHOTO_MANAGER_V1.5a
         run: |
           python -m pip install --upgrade pip
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
           python -m pip install -r requirements.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Test engines
-        working-directory: source/PHOTO_MANAGER_V1.5
+        working-directory: source/PHOTO_MANAGER_V1.5a
         run: |
-          python -m py_compile qt_app.py library_setup.py photo_manager_v1_4.py legacy.py everything_search.py organize.py
+          python -m compileall -q . -x "exiftool_files"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
           python test_sync.py
@@ -59,14 +56,17 @@ jobs:
           python test_organize.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+          python test_metadata.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Build Windows EXE
-        working-directory: source/PHOTO_MANAGER_V1.5
+        working-directory: source/PHOTO_MANAGER_V1.5a
         run: |
-          python -m PyInstaller --noconfirm --clean --onedir --windowed --noupx --name PHOTO_MANAGER --icon PHOTO_MANAGER.ico --add-data 'PHOTO_MANAGER.ico;.' --collect-all pillow_heif qt_app.py
+          python -m PyInstaller --noconfirm --clean --onedir --windowed --noupx --name PHOTO_MANAGER --icon PHOTO_MANAGER.ico --add-data 'PHOTO_MANAGER.ico;.' --version-file version_info.txt --collect-all pillow_heif qt_app.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Prepare portable directory
-        working-directory: source/PHOTO_MANAGER_V1.5
+        working-directory: source/PHOTO_MANAGER_V1.5a
         run: |
           $out = 'dist/PHOTO_MANAGER'
 
@@ -77,7 +77,7 @@ jobs:
 
           Copy-Item CHANGELOG.txt, DEVELOPMENT_LOG.txt, SPECIFICATION.txt, TEST_RESULTS.txt "$out/DOCUMENTS" -Force
 
-          Copy-Item qt_app.py, library_setup.py, photo_manager_v1_4.py, legacy.py, requirements.txt, test_sync.py, test_library.py, everything_search.py, test_everything.py, organize.py, test_organize.py, PHOTO_MANAGER.ico "$out/SOURCE" -Force
+          Copy-Item qt_app.py, library_setup.py, photo_manager_v1_4.py, legacy.py, requirements.txt, test_sync.py, test_library.py, everything_search.py, test_everything.py, organize.py, test_organize.py, test_metadata.py, screenshot_detect.py, version.py, version_info.txt, PHOTO_MANAGER.ico "$out/SOURCE" -Force
 
           if (!(Test-Path "$out/PHOTO_MANAGER.exe")) {
             throw 'PHOTO_MANAGER.exe missing'
@@ -98,7 +98,7 @@ jobs:
       - name: Upload portable application
         uses: actions/upload-artifact@v4
         with:
-          name: PHOTO_MANAGER_V1.5
-          path: source/PHOTO_MANAGER_V1.5/dist/PHOTO_MANAGER/
+          name: PHOTO_MANAGER_V1.5a
+          path: source/PHOTO_MANAGER_V1.5a/dist/PHOTO_MANAGER/
           if-no-files-found: error
           retention-days: 30
