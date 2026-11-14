@@ -11,80 +11,212 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
+
     env:
       PYTHONUTF8: '1'
       PYTHONIOENCODING: utf-8
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
       - name: Extract source
-        run: Expand-Archive PHOTO_MANAGER_V1.6_SOURCE.zip -DestinationPath source
+        run: |
+          Expand-Archive PHOTO_MANAGER_V1.6_SOURCE.zip -DestinationPath source -Force
 
       - name: Install dependencies
         working-directory: source/PHOTO_MANAGER_V1.6
-        run: python -m pip install -r requirements.txt
+        run: |
+          python -m pip install --upgrade pip
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          python -m pip install -r requirements.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Prepare offline CLIP model
         working-directory: source/PHOTO_MANAGER_V1.6
         run: |
           python -m pip install -r requirements-clip-build.txt
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
           $model = Invoke-RestMethod 'https://huggingface.co/api/models/openai/clip-vit-base-patch32'
-          if ($model.cardData.license -ne "mit") { throw "Model license requires review" }
+
+          $license = $model.cardData.license
+          Write-Host "Hugging Face model license: $license"
+
+          if ($license -and $license -ne "mit") {
+              throw "Unexpected model license: $license"
+          }
+
+          if (-not $license) {
+              Write-Warning "Model license metadata is missing. Review upstream license and model card before distribution."
+          }
+
           $revision = $model.sha
-          if ($revision -notmatch '^[0-9a-f]{40}$') { throw 'Invalid model revision' }
+
+          if ($revision -notmatch '^[0-9a-f]{40}$') {
+              throw 'Invalid model revision'
+          }
+
+          Write-Host "CLIP model revision: $revision"
+
           python prepare_clip.py --revision $revision
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Invoke-WebRequest 'https://raw.githubusercontent.com/openai/CLIP/main/LICENSE' -OutFile AI_MODELS/CLIP_LICENSE.txt
-          Invoke-WebRequest "https://huggingface.co/openai/clip-vit-base-patch32/raw/$revision/README.md" -OutFile AI_MODELS/MODEL_CARD.md
+
+          Invoke-WebRequest `
+            'https://raw.githubusercontent.com/openai/CLIP/main/LICENSE' `
+            -OutFile AI_MODELS/CLIP_LICENSE.txt
+
+          Invoke-WebRequest `
+            "https://huggingface.co/openai/clip-vit-base-patch32/raw/$revision/README.md" `
+            -OutFile AI_MODELS/MODEL_CARD.md
+
+          if (!(Test-Path "AI_MODELS/image_encoder.onnx")) {
+              throw "CLIP ONNX model missing"
+          }
+
+          Write-Host "CLIP model preparation completed."
 
       - name: Test engines
         working-directory: source/PHOTO_MANAGER_V1.6
         run: |
           python -m compileall -q . -x "exiftool_files"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
           python test_sync.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
           python test_library.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
           python test_everything.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
           python test_organize.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
           python test_sync_v16.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
           python test_dedup_v16.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -c "from clip_local import ClipLocal; from PIL import Image; Image.new('RGB',(224,224),'blue').save('clip_smoke.png'); print(ClipLocal().classify('clip_smoke.png'))"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
           python test_clip_local.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
           python test_metadata.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+          python -c "from clip_local import ClipLocal; from PIL import Image; Image.new('RGB',(224,224),'blue').save('clip_smoke.png'); print(ClipLocal().classify('clip_smoke.png'))"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          Write-Host "All engine tests completed."
+
       - name: Build Windows EXE
         working-directory: source/PHOTO_MANAGER_V1.6
-        run: python -m PyInstaller --noconfirm --clean --onedir --windowed --noupx --name PHOTO_MANAGER --icon PHOTO_MANAGER.ico --add-data 'PHOTO_MANAGER.ico;.' --version-file version_info.txt --collect-all pillow_heif --collect-all onnxruntime qt_app.py
+        run: |
+          python -m PyInstaller `
+            --noconfirm `
+            --clean `
+            --onedir `
+            --windowed `
+            --noupx `
+            --name PHOTO_MANAGER `
+            --icon PHOTO_MANAGER.ico `
+            --add-data 'PHOTO_MANAGER.ico;.' `
+            --version-file version_info.txt `
+            --collect-all pillow_heif `
+            --collect-all onnxruntime `
+            qt_app.py
+
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Prepare portable directory
         working-directory: source/PHOTO_MANAGER_V1.6
         run: |
           $out = 'dist/PHOTO_MANAGER'
-          Copy-Item exiftool.exe, README.txt $out
-          Copy-Item exiftool_files, AI_MODELS $out -Recurse -Force
-          New-Item -ItemType Directory "$out/DOCUMENTS", "$out/SOURCE" -Force
-          Copy-Item CHANGELOG.txt, DEVELOPMENT_LOG.txt, SPECIFICATION.txt, TEST_RESULTS.txt "$out/DOCUMENTS"
-          Copy-Item qt_app.py, library_setup.py, photo_manager_v1_4.py, legacy.py, requirements.txt, test_sync.py, test_library.py, everything_search.py, test_everything.py, organize.py, test_organize.py, test_metadata.py, screenshot_detect.py, version.py, version_info.txt, PHOTO_MANAGER.ico "$out/SOURCE"
-          Copy-Item clip_local.py, prepare_clip.py, evaluate_clip.py, test_clip_local.py, test_sync_v16.py, test_dedup_v16.py, requirements-clip-build.txt "$out/SOURCE" -Force
-          if (!(Test-Path "$out/AI_MODELS/image_encoder.onnx")) { throw "CLIP model missing" }
-          if (!(Test-Path "$out/PHOTO_MANAGER.exe")) { throw 'EXE missing' }
 
-      - uses: actions/upload-artifact@v4
+          Copy-Item exiftool.exe, README.txt $out -Force
+          Copy-Item exiftool_files, AI_MODELS $out -Recurse -Force
+
+          New-Item -ItemType Directory `
+            "$out/DOCUMENTS", `
+            "$out/SOURCE" `
+            -Force
+
+          Copy-Item `
+            CHANGELOG.txt, `
+            DEVELOPMENT_LOG.txt, `
+            SPECIFICATION.txt, `
+            TEST_RESULTS.txt `
+            "$out/DOCUMENTS" -Force
+
+          Copy-Item `
+            qt_app.py, `
+            library_setup.py, `
+            photo_manager_v1_4.py, `
+            legacy.py, `
+            requirements.txt, `
+            test_sync.py, `
+            test_library.py, `
+            everything_search.py, `
+            test_everything.py, `
+            organize.py, `
+            test_organize.py, `
+            test_metadata.py, `
+            screenshot_detect.py, `
+            version.py, `
+            version_info.txt, `
+            PHOTO_MANAGER.ico `
+            "$out/SOURCE" -Force
+
+          Copy-Item `
+            clip_local.py, `
+            prepare_clip.py, `
+            evaluate_clip.py, `
+            test_clip_local.py, `
+            test_sync_v16.py, `
+            test_dedup_v16.py, `
+            requirements-clip-build.txt `
+            "$out/SOURCE" -Force
+
+          if (!(Test-Path "$out/PHOTO_MANAGER.exe")) {
+              throw 'PHOTO_MANAGER.exe missing'
+          }
+
+          if (!(Test-Path "$out/_internal")) {
+              throw 'PyInstaller internal directory missing'
+          }
+
+          if (!(Test-Path "$out/exiftool.exe")) {
+              throw 'ExifTool executable missing'
+          }
+
+          if (!(Test-Path "$out/exiftool_files")) {
+              throw 'ExifTool support directory missing'
+          }
+
+          if (!(Test-Path "$out/AI_MODELS/image_encoder.onnx")) {
+              throw 'CLIP ONNX model missing'
+          }
+
+          if (!(Test-Path "$out/AI_MODELS/CLIP_LICENSE.txt")) {
+              throw 'CLIP license document missing'
+          }
+
+          if (!(Test-Path "$out/AI_MODELS/MODEL_CARD.md")) {
+              throw 'CLIP model card missing'
+          }
+
+          Write-Host "PHOTO_MANAGER V1.6 portable package ready."
+
+      - name: Upload portable application
+        uses: actions/upload-artifact@v4
         with:
           name: PHOTO_MANAGER_V1.6
           path: source/PHOTO_MANAGER_V1.6/dist/PHOTO_MANAGER/
