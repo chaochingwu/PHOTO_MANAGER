@@ -1,11 +1,11 @@
 
-name: Build PHOTO_MANAGER V1.6a RC02
+name: Build PHOTO_MANAGER V2.0
 
 on:
   workflow_dispatch:
   push:
     paths:
-      - PHOTO_MANAGER_V1.6a_RC02_SOURCE.zip
+      - PHOTO_MANAGER_V2.0.zip
       - .github/workflows/build-windows.yml
 
 jobs:
@@ -17,7 +17,7 @@ jobs:
       PYTHONIOENCODING: utf-8
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Python
@@ -27,13 +27,12 @@ jobs:
 
       - name: Extract source
         run: |
-          $zip = 'PHOTO_MANAGER_V1.6a_RC02_SOURCE.zip'
-
+          $zip = 'PHOTO_MANAGER_V2.0.zip'
           $actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
 
           Write-Host "Source SHA256: $actual"
 
-          if ($actual -ne '241a7b49ed2fdb04648f726e5bf23c673d991a450b5f8ff49f2c61261e2c81a5') {
+          if ($actual -ne '56b08aa926b0d7a1e85d50fb1fe4a4e6fd041eb0197d5b57873d38d30558a62f') {
             throw 'Wrong source ZIP SHA256'
           }
 
@@ -41,7 +40,7 @@ jobs:
 
           Expand-Archive $zip -DestinationPath source -Force
 
-          $root = 'source/PHOTO_MANAGER_V1.6a'
+          $root = 'source/PHOTO_MANAGER_V2.0'
 
           Get-Content "$root/BUILD_ID.txt"
 
@@ -54,13 +53,13 @@ jobs:
           Select-String -Path "$root/prepare_clip.py" -Pattern 'use_safetensors'
 
       - name: Install dependencies
-        working-directory: source/PHOTO_MANAGER_V1.6a
+        working-directory: source/PHOTO_MANAGER_V2.0
         run: |
           python -m pip install -r requirements.txt
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Prepare offline CLIP model
-        working-directory: source/PHOTO_MANAGER_V1.6a
+      - name: Prepare CLIP model
+        working-directory: source/PHOTO_MANAGER_V2.0
         run: |
           python -m pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cpu
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -97,102 +96,87 @@ jobs:
           Invoke-WebRequest "https://huggingface.co/openai/clip-vit-base-patch32/raw/$revision/README.md" -OutFile AI_MODELS/MODEL_CARD.md
 
       - name: Test engines
-        working-directory: source/PHOTO_MANAGER_V1.6a
+        working-directory: source/PHOTO_MANAGER_V2.0
         run: |
           python -m compileall -q . -x "exiftool_files"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-          python test_sync.py
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-          python test_library.py
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-          python test_everything.py
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-          python test_organize.py
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-          python test_sync_v16.py
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-          python test_dedup_v16.py
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-          python -c "from clip_local import ClipLocal; from PIL import Image; Image.new('RGB',(224,224),'blue').save('clip_smoke.png'); print(ClipLocal().classify('clip_smoke.png'))"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-          python test_clip_local.py
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-          python test_metadata.py
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-          foreach ($test in @(
+          $tests = @(
+            'test_sync.py',
+            'test_library.py',
+            'test_everything.py',
+            'test_organize.py',
+            'test_sync_v16.py',
+            'test_dedup_v16.py',
+            'test_clip_local.py',
+            'test_metadata.py',
             'test_pair_sync.py',
             'test_date_repair.py',
             'test_closeout.py'
-          )) {
+          )
+
+          foreach ($test in $tests) {
             Write-Host "Running $test"
             python $test
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 
+          python -c "from clip_local import ClipLocal; from PIL import Image; Image.new('RGB',(224,224),'blue').save('clip_smoke.png'); print(ClipLocal().classify('clip_smoke.png'))"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
           Write-Host "All engine tests completed."
 
       - name: Build Windows EXE
-        working-directory: source/PHOTO_MANAGER_V1.6a
+        working-directory: source/PHOTO_MANAGER_V2.0
         run: |
           python -m PyInstaller --noconfirm --clean --onedir --windowed --noupx --name PHOTO_MANAGER --icon PHOTO_MANAGER.ico --add-data 'PHOTO_MANAGER.ico;.' --version-file version_info.txt --collect-all pillow_heif --collect-all onnxruntime qt_app.py
 
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Prepare portable directory
-        working-directory: source/PHOTO_MANAGER_V1.6a
+      - name: Prepare portable package
+        working-directory: source/PHOTO_MANAGER_V2.0
         run: |
-          $out = 'dist/PHOTO_MANAGER'
+          Rename-Item dist/PHOTO_MANAGER PHOTO_MANAGER_V2.0
+
+          $out = 'dist/PHOTO_MANAGER_V2.0'
 
           Copy-Item exiftool.exe, README.txt $out -Force
-
           Copy-Item exiftool_files, AI_MODELS $out -Recurse -Force
 
           New-Item -ItemType Directory "$out/DOCUMENTS", "$out/SOURCE" -Force
 
-          Copy-Item CHANGELOG.txt, DEVELOPMENT_LOG.txt, SPECIFICATION.txt, TEST_RESULTS.txt, USER_MANUAL.txt, RELEASE_TEST_LOG.txt "$out/DOCUMENTS" -Force
+          Copy-Item CHANGELOG.txt, DEVELOPMENT_LOG.txt, SPECIFICATION.txt, TEST_RESULTS.txt, USER_MANUAL.txt, RELEASE_TEST_LOG.txt, RELEASE_STATUS.txt "$out/DOCUMENTS" -Force
 
           Copy-Item qt_app.py, library_setup.py, photo_manager_v1_4.py, legacy.py, requirements.txt, test_sync.py, test_library.py, everything_search.py, test_everything.py, organize.py, test_organize.py, test_metadata.py, screenshot_detect.py, version.py, version_info.txt, PHOTO_MANAGER.ico "$out/SOURCE" -Force
 
           Copy-Item clip_local.py, prepare_clip.py, evaluate_clip.py, test_clip_local.py, test_sync_v16.py, test_dedup_v16.py, requirements-clip-build.txt, test_pair_sync.py, test_date_repair.py, test_closeout.py, BUILD_ID.txt "$out/SOURCE" -Force
 
-          if (!(Test-Path "$out/AI_MODELS/image_encoder.onnx")) {
-            throw "CLIP model missing"
-          }
-
-          if (!(Test-Path "$out/PHOTO_MANAGER.exe")) {
-            throw 'EXE missing'
-          }
-
-          foreach ($required in @(
+          $required = @(
+            'PHOTO_MANAGER.exe',
             '_internal',
             'exiftool.exe',
             'exiftool_files',
+            'AI_MODELS/image_encoder.onnx',
             'AI_MODELS/manifest.json',
             'AI_MODELS/text_embeddings.npy',
             'AI_MODELS/CLIP_LICENSE.txt',
-            'AI_MODELS/MODEL_CARD.md'
-          )) {
-            if (!(Test-Path "$out/$required")) {
-              throw "Missing: $required"
+            'AI_MODELS/MODEL_CARD.md',
+            'DOCUMENTS/RELEASE_STATUS.txt',
+            'SOURCE/BUILD_ID.txt'
+          )
+
+          foreach ($item in $required) {
+            if (!(Test-Path "$out/$item")) {
+              throw "Missing: $item"
             }
           }
 
-          Write-Host "PHOTO_MANAGER V1.6a RC02 portable package ready."
+          Write-Host "PHOTO_MANAGER V2.0 package ready."
 
-      - name: Upload portable application
+      - name: Upload PHOTO_MANAGER V2.0
         uses: actions/upload-artifact@v4
         with:
-          name: PHOTO_MANAGER_V1.6a_RC02
-          path: source/PHOTO_MANAGER_V1.6a/dist/PHOTO_MANAGER/
+          name: PHOTO_MANAGER_V2.0
+          path: source/PHOTO_MANAGER_V2.0/dist/PHOTO_MANAGER_V2.0/
           if-no-files-found: error
           retention-days: 30
