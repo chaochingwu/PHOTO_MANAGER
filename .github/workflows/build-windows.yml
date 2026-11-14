@@ -1,11 +1,11 @@
 
-name: Build PHOTO_MANAGER V1.6a
+name: Build PHOTO_MANAGER V1.6a RC02
 
 on:
   workflow_dispatch:
   push:
     paths:
-      - PHOTO_MANAGER_V1.6a_SOURCE.zip
+      - PHOTO_MANAGER_V1.6a_RC02_SOURCE.zip
       - .github/workflows/build-windows.yml
 
 jobs:
@@ -27,11 +27,13 @@ jobs:
 
       - name: Extract source
         run: |
-          $zip = 'PHOTO_MANAGER_V1.6a_SOURCE.zip'
+          $zip = 'PHOTO_MANAGER_V1.6a_RC02_SOURCE.zip'
+
           $actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+
           Write-Host "Source SHA256: $actual"
 
-          if ($actual -ne '7190f15dc24d4106b02b67d2fe3e10fff1ce0d5024c3ad9a01e5788bfd496726') {
+          if ($actual -ne '241a7b49ed2fdb04648f726e5bf23c673d991a450b5f8ff49f2c61261e2c81a5') {
             throw 'Wrong source ZIP SHA256'
           }
 
@@ -127,10 +129,17 @@ jobs:
           python test_metadata.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-          foreach ($test in @('test_pair_sync.py','test_date_repair.py','test_closeout.py')) {
+          foreach ($test in @(
+            'test_pair_sync.py',
+            'test_date_repair.py',
+            'test_closeout.py'
+          )) {
+            Write-Host "Running $test"
             python $test
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
+
+          Write-Host "All engine tests completed."
 
       - name: Build Windows EXE
         working-directory: source/PHOTO_MANAGER_V1.6a
@@ -144,15 +153,15 @@ jobs:
         run: |
           $out = 'dist/PHOTO_MANAGER'
 
-          Copy-Item exiftool.exe, README.txt $out
+          Copy-Item exiftool.exe, README.txt $out -Force
 
           Copy-Item exiftool_files, AI_MODELS $out -Recurse -Force
 
           New-Item -ItemType Directory "$out/DOCUMENTS", "$out/SOURCE" -Force
 
-          Copy-Item CHANGELOG.txt, DEVELOPMENT_LOG.txt, SPECIFICATION.txt, TEST_RESULTS.txt, USER_MANUAL.txt, RELEASE_TEST_LOG.txt "$out/DOCUMENTS"
+          Copy-Item CHANGELOG.txt, DEVELOPMENT_LOG.txt, SPECIFICATION.txt, TEST_RESULTS.txt, USER_MANUAL.txt, RELEASE_TEST_LOG.txt "$out/DOCUMENTS" -Force
 
-          Copy-Item qt_app.py, library_setup.py, photo_manager_v1_4.py, legacy.py, requirements.txt, test_sync.py, test_library.py, everything_search.py, test_everything.py, organize.py, test_organize.py, test_metadata.py, screenshot_detect.py, version.py, version_info.txt, PHOTO_MANAGER.ico "$out/SOURCE"
+          Copy-Item qt_app.py, library_setup.py, photo_manager_v1_4.py, legacy.py, requirements.txt, test_sync.py, test_library.py, everything_search.py, test_everything.py, organize.py, test_organize.py, test_metadata.py, screenshot_detect.py, version.py, version_info.txt, PHOTO_MANAGER.ico "$out/SOURCE" -Force
 
           Copy-Item clip_local.py, prepare_clip.py, evaluate_clip.py, test_clip_local.py, test_sync_v16.py, test_dedup_v16.py, requirements-clip-build.txt, test_pair_sync.py, test_date_repair.py, test_closeout.py, BUILD_ID.txt "$out/SOURCE" -Force
 
@@ -178,10 +187,12 @@ jobs:
             }
           }
 
+          Write-Host "PHOTO_MANAGER V1.6a RC02 portable package ready."
+
       - name: Upload portable application
         uses: actions/upload-artifact@v4
         with:
-          name: PHOTO_MANAGER_V1.6a
+          name: PHOTO_MANAGER_V1.6a_RC02
           path: source/PHOTO_MANAGER_V1.6a/dist/PHOTO_MANAGER/
           if-no-files-found: error
           retention-days: 30
