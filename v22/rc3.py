@@ -6,6 +6,7 @@ from PySide6.QtGui import QPixmap, QIcon, QImage, QAction, QKeySequence, QImageR
 from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QHBoxLayout,QVBoxLayout,QSplitter,QTreeView,QFileSystemModel,QListWidget,QListWidgetItem,QLabel,QPushButton,QLineEdit,QFileDialog,QTabWidget,QFormLayout,QScrollArea,QDialog,QMessageBox,QToolBar,QStatusBar,QCheckBox,QComboBox,QFrame, QToolButton, QAbstractItemView, QScrollBar, QMenu, QInputDialog, QSlider, QSpinBox, QTextEdit, QStackedWidget, QSizePolicy, QScrollArea)
 from PIL import Image, ImageOps, ExifTags
 import json, sqlite3, hashlib
+from contextlib import contextmanager, closing
 try:
  from send2trash import send2trash
 except ImportError:
@@ -106,7 +107,10 @@ class FavoritesStore:
   self.path=base/'favorites.sqlite'
   with self.connect() as db:
    db.execute('CREATE TABLE IF NOT EXISTS favorites(path TEXT PRIMARY KEY, rating INTEGER NOT NULL DEFAULT 5, file_size INTEGER, sha256 TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)')
- def connect(self):return sqlite3.connect(self.path)
+ @contextmanager
+ def connect(self):
+  with closing(sqlite3.connect(self.path)) as db, db:
+   yield db
  def all(self):
   with self.connect() as db:return {os.path.normcase(os.path.abspath(r[0])) for r in db.execute('SELECT path FROM favorites WHERE rating=5')}
  def set(self,path,enabled):
