@@ -3,8 +3,12 @@ on:
   push:
     branches: [develop/v2.2-integration]
   workflow_dispatch:
+    inputs:
+      publish:
+        type: boolean
+        default: false
 permissions:
-  contents: read
+  contents: write
 jobs:
   windows:
     runs-on: windows-latest
@@ -13,17 +17,26 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -m pip install PySide6 Pillow opencv-python-headless pillow-heif rawpy imageio-ffmpeg pyinstaller
+      - run: python -m pip install PySide6 Pillow opencv-python-headless pillow-heif rawpy imageio-ffmpeg send2trash pyinstaller
       - run: python -m compileall -q v22
       - working-directory: v22
         run: python -m unittest test_rc2f_bridge test_workspace
+      - run: Expand-Archive PHOTO_MANAGER_V2.0.zip -DestinationPath baseline
       - working-directory: v22
-        run: pyinstaller --noconfirm --windowed --name PHOTO_MANAGER --paths core --hidden-import qt_unified main.py
+        run: pyinstaller --additional-hooks-dir hooks --add-data "../baseline/PHOTO_MANAGER_V2.0/exiftool.exe;." --add-data "../baseline/PHOTO_MANAGER_V2.0/exiftool_files;exiftool_files" --add-data "../baseline/PHOTO_MANAGER_V2.0/PHOTO_MANAGER.ico;." --noconfirm --windowed --name PHOTO_MANAGER --paths core --hidden-import qt_unified main.py
       - working-directory: v22
         run: |
+          $env:LOCALAPPDATA = New-Item -Type Directory "$env:RUNNER_TEMP/smoke-profile"
+          $proc = Start-Process dist/PHOTO_MANAGER/PHOTO_MANAGER.exe -ArgumentList "--smoke-test" -PassThru
+          if (-not $proc.WaitForExit(90000) -or $proc.ExitCode -ne 0) { throw "Packaged application failed smoke test" }
           Compress-Archive -Path dist/PHOTO_MANAGER -DestinationPath PHOTO_MANAGER-Windows.zip
           python -c "import zipfile; z=zipfile.ZipFile('PHOTO_MANAGER-Windows.zip'); assert z.testzip() is None"
       - uses: actions/upload-artifact@v4
         with:
           name: PHOTO_MANAGER-Windows-integration
           path: v22/PHOTO_MANAGER-Windows.zip
+      - name: Publish Windows prerelease
+        if: (github.event_name == 'workflow_dispatch' && inputs.publish) || contains(github.event.head_commit.message, '[beta.1]')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create v2.2-beta.1 v22/PHOTO_MANAGER-Windows.zip --target "${{ github.sha }}" --prerelease --title "PHOTO_MANAGER V2.2 Beta 1" --notes "Windows 家庭測試版。使用測試照片副本。RC3 與 V2 管理中心可切換。整理及同步執行已鎖定。跨介面愛心與 Windows 實機操作待驗收。"

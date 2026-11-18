@@ -51,5 +51,10 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     window = Workspace()
+    if "--smoke-test" in sys.argv:
+        window.open_center()
+        assert "照片庫管理" in window.center.pages
+        window.setCurrentWidget(window.viewer)
+        sys.exit(0 if window.close() else 1)
     window.show()
     sys.exit(app.exec())

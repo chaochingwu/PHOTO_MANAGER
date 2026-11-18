@@ -56,7 +56,7 @@ def getdate(p,raw,ev):
     return dt.datetime.fromtimestamp(p.stat().st_mtime).date().isoformat(),'FileModifyDate',q
 
 def exif_path():
-    return next((str(p) for p in [Path(__import__('sys').executable).parent/'exiftool.exe' if getattr(__import__('sys'),'frozen',False) else Path(__file__).resolve().parent/'exiftool.exe',Path(__file__).resolve().parent/'exiftool'] if p.is_file()),None) or shutil.which('exiftool')
+    return next((str(p) for p in [Path(getattr(__import__('sys'),'_MEIPASS',Path(__import__('sys').executable).parent))/'exiftool.exe' if getattr(__import__('sys'),'frozen',False) else Path(__file__).resolve().parent/'exiftool.exe',Path(__file__).resolve().parent/'exiftool'] if p.is_file()),None) or shutil.which('exiftool')
 _exif_runtime=None
 
 def portable_exif(exe):
