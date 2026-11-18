@@ -80,7 +80,13 @@ def execute(source,dest,entries,cancel=lambda:False,progress=lambda n:None):
         safe_parent(dest,target)
         fd,tmp=tempfile.mkstemp(prefix='.pm_copy_',dir=target.parent);os.close(fd);tmp=Path(tmp)
         try:
-            shutil.copy2(p,tmp)
+            with p.open('rb') as inp, tmp.open('wb') as out:
+                while block := inp.read(1024*1024):
+                    if cancel():raise InterruptedError('已停止；來源與已完成檔案保留')
+                    out.write(block)
+                out.flush()
+                os.fsync(out.fileno())
+            shutil.copystat(p,tmp)
             if sha256(tmp)!=e.digest:raise OSError('來源變更或複製驗證失敗：'+str(p))
             if cancel():raise InterruptedError('已取消；已完成檔案保留')
             os.link(tmp,target) # exclusive publish; unsupported filesystem fails safely

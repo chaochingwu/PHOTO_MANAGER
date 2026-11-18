@@ -20,7 +20,7 @@ jobs:
       - run: python -m pip install PySide6 Pillow opencv-python-headless pillow-heif rawpy imageio-ffmpeg send2trash pyinstaller
       - run: python -m compileall -q v22
       - working-directory: v22
-        run: python -m unittest test_rc2f_bridge test_workspace
+        run: python -m unittest test_rc2f_bridge test_workspace test_capacity
       - run: Expand-Archive PHOTO_MANAGER_V2.0.zip -DestinationPath baseline
       - working-directory: v22
         run: pyinstaller --additional-hooks-dir hooks --add-data "../baseline/PHOTO_MANAGER_V2.0/exiftool.exe;." --add-data "../baseline/PHOTO_MANAGER_V2.0/exiftool_files;exiftool_files" --add-data "../baseline/PHOTO_MANAGER_V2.0/PHOTO_MANAGER.ico;." --noconfirm --windowed --name PHOTO_MANAGER --paths core --hidden-import qt_unified main.py
@@ -36,7 +36,7 @@ jobs:
           name: PHOTO_MANAGER-Windows-integration
           path: v22/PHOTO_MANAGER-Windows.zip
       - name: Publish Windows prerelease
-        if: (github.event_name == 'workflow_dispatch' && inputs.publish) || contains(github.event.head_commit.message, '[beta.1]')
+        if: (github.event_name == 'workflow_dispatch' && inputs.publish) || contains(github.event.head_commit.message, '[beta.2]')
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create v2.2-beta.1 v22/PHOTO_MANAGER-Windows.zip --target "${{ github.sha }}" --prerelease --title "PHOTO_MANAGER V2.2 Beta 1" --notes "Windows 家庭測試版。使用測試照片副本。RC3 與 V2 管理中心可切換。整理及同步執行已鎖定。跨介面愛心與 Windows 實機操作待驗收。"
+        run: gh release create v2.2-beta.2 v22/PHOTO_MANAGER-Windows.zip --target "${{ github.sha }}" --prerelease --title "PHOTO_MANAGER V2.2 Beta 2" --notes "新增容量預檢、單向備份預覽與驗證、Takeout 多 ZIP 選取。原地整理與完整同步仍鎖定。請使用測試副本。"

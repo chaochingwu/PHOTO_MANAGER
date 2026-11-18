@@ -170,8 +170,9 @@ class Unified(UpgradeWindow):
     def reload_library(self,_=None):self.lib.rebuild();self.lib.refresh_rows()
     def audit(self):
         if not self.lib.guard():return
-        src=self.folder('Takeout ZIP 來源');
-        if not src:return
+        archives,_=QFileDialog.getOpenFileNames(self,'選取同一資料夾內的 Takeout ZIP','','ZIP (*.zip)')
+        if not archives:return
+        src=Path(archives[0]).parent
         try:
             out=self.report_path()
             if not out:return
@@ -180,7 +181,7 @@ class Unified(UpgradeWindow):
         from takeout_audit import audit
         import json,os,tempfile
         def run():
-            data=audit(Path(src),HOME/'takeout_hashes.sqlite',self.lib.c.path);fd,tmp=tempfile.mkstemp(dir=out.parent)
+            data=audit(Path(src),HOME/'takeout_hashes.sqlite',self.lib.c.path,selected=archives);fd,tmp=tempfile.mkstemp(dir=out.parent)
             try:
                 with os.fdopen(fd,'w',encoding='utf-8') as f:json.dump(data,f,ensure_ascii=False,indent=2)
                 os.replace(tmp,out)
@@ -191,8 +192,9 @@ class Unified(UpgradeWindow):
         if not self.lib.guard():return
         import json
         from takeout_import import run
-        src=self.folder('Takeout ZIP 來源');
-        if not src:return
+        archives,_=QFileDialog.getOpenFileNames(self,'選取同一資料夾內的 Takeout ZIP','','ZIP (*.zip)')
+        if not archives:return
+        src=Path(archives[0]).parent
         p,_=QFileDialog.getOpenFileName(self,'已完成健檢報告','','JSON (*.json)')
         if not p:return
         try:
@@ -201,7 +203,7 @@ class Unified(UpgradeWindow):
             dest=self.folder('獨立匯入目的地');
             if not dest:return
             if QMessageBox.question(self,'確認匯入',f'{d["counts"]}\n保留 ZIP，驗證 SHA256。繼續？')!=QMessageBox.StandardButton.Yes:return
-            self.lib.task(lambda:run(src,dest,self.lib.c.path,HOME/'takeout_hashes.sqlite',cancel=self.lib.cancel.is_set,approved=d['media']),self.reload_library)
+            self.lib.task(lambda:run(src,dest,self.lib.c.path,HOME/'takeout_hashes.sqlite',cancel=self.lib.cancel.is_set,approved=d['media'],selected=archives),self.reload_library)
         except Exception as e:self.lib.error(e)
     def export_index(self):
         if not self.lib.guard():return

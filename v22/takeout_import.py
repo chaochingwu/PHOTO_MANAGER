@@ -14,14 +14,14 @@ def taken(m):
     try:return datetime.fromtimestamp(int(m['photoTakenTime']['timestamp']),timezone(timedelta(hours=8))).date().isoformat()
     except (KeyError,TypeError,ValueError,OverflowError,OSError):return ''
 
-def run(folder,destination,dbpath,checkpoint,progress=lambda s:None,cancel=lambda:False,approved=None):
+def run(folder,destination,dbpath,checkpoint,progress=lambda s:None,cancel=lambda:False,approved=None,selected=None):
     src=Path(folder).resolve(); dest=Path(destination).resolve(); dbpath=Path(dbpath).resolve()
     if src==dest or src in dest.parents or dest in src.parents:raise ValueError('匯入目的地不可與 ZIP 來源重疊')
     if not dest.is_dir() or linked(dest):raise ValueError('請先建立獨立的匯入資料夾')
     def tick(s):
         if cancel():raise InterruptedError('已停止；重新執行可續傳')
         progress(s)
-    result=audit(src,checkpoint,dbpath,tick)
+    result=audit(src,checkpoint,dbpath,tick,selected=selected)
     if result['errors'] or result['incomplete']:raise ValueError('健檢有錯誤或下載未完成，停止匯入')
     def stable(rows):return [{k:v for k,v in m.items() if k!='duplicate'} for m in rows]
     if approved is not None and stable(approved)!=stable(result['media']):raise ValueError('來源與已確認報告不同，請重新健檢')
@@ -32,6 +32,10 @@ def run(folder,destination,dbpath,checkpoint,progress=lambda s:None,cancel=lambd
             tick('確認主庫 '+r['rel']); p=Path(r['root'])/r['rel']; hashes[hashfile(p)].append(r['id'])
         with c.db:
             c.db.execute('CREATE TABLE IF NOT EXISTS takeout_import_log(sha TEXT,archive TEXT,member TEXT,photo TEXT,metadata TEXT,PRIMARY KEY(archive,member,sha,photo))')
+        planned = {m['sha256']:m['size'] for m in result['media'] if m['sha256'] not in hashes}
+        required = sum(planned.values()) + 16*1024**2
+        available = shutil.disk_usage(dest).free
+        if available < required:raise OSError(f'Takeout 空間不足：需要 {required:,} bytes，可用 {available:,} bytes')
         for i,m in enumerate(result['media']):
             tick(f'匯入 {i+1}/{len(result["media"])}：{m["member"]}')
             sha=m['sha256']; ids=hashes.get(sha,[]); dt=taken(m)
@@ -51,10 +55,13 @@ def run(folder,destination,dbpath,checkpoint,progress=lambda s:None,cancel=lambd
                 fd,tmp=tempfile.mkstemp(prefix='.pm_import_',dir=sub);os.close(fd);tmp=Path(tmp)
                 try:
                     with zipfile.ZipFile(src/m['zip']) as z, z.open(m['member']) as f, tmp.open('wb') as out:
+                        written = 0
                         while True:
                             if cancel():raise InterruptedError('已停止')
                             block=f.read(1024*1024)
                             if not block:break
+                            written += len(block)
+                            if written > m['size']:raise ValueError('成員大小已變動，重新健檢')
                             out.write(block)
                         out.flush();os.fsync(out.fileno())
                     if hashfile(tmp)!=sha:raise ValueError('SHA256 驗證失敗')

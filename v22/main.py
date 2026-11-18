@@ -9,6 +9,11 @@ from qt_unified import Unified, STYLE
 
 
 class ManagementCenter(Unified):
+    def __init__(self):
+        super().__init__()
+        from capacity_page import CapacityPage
+        self.add_page("容量預檢與備份",CapacityPage(self),1,"SP_DriveHDIcon")
+
     def start(self, action):
         if action in {"sync", "organize"}:
             QMessageBox.information(self, "開發版安全鎖", "整理與同步等待完整預覽及衝突檢查驗證。")

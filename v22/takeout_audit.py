@@ -11,11 +11,19 @@ def digest(stream):
     for block in iter(lambda:stream.read(1024*1024),b''):h.update(block)
     return h.hexdigest()
 
-def audit(folder,checkpoint,library=None,progress=lambda s:None):
+def archive_list(folder, selected):
+    if selected is None:
+        return sorted(folder.glob('*.zip'))
+    archives = [Path(p).absolute() for p in selected]
+    if any(p.parent.resolve() != folder or p.suffix.lower() != '.zip' or not p.is_file() for p in archives):
+        raise ValueError('請選同一來源資料夾內的 ZIP')
+    return sorted(set(archives))
+
+def audit(folder,checkpoint,library=None,progress=lambda s:None,selected=None):
     folder=Path(folder).resolve();checkpoint=Path(checkpoint).resolve()
     if library and checkpoint==Path(library).resolve():raise ValueError('checkpoint 不可使用主資料庫')
     if checkpoint==folder or folder in checkpoint.parents:raise ValueError('checkpoint 必須在來源之外')
-    archives=sorted(folder.glob('*.zip')); incomplete=sorted(p.name for p in folder.glob('*.crdownload'))
+    archives=archive_list(folder,selected); incomplete=sorted(p.name for p in folder.glob('*.crdownload'))
     if not archives:raise ValueError('找不到 ZIP')
     checkpoint.parent.mkdir(parents=True,exist_ok=True)
     db=sqlite3.connect(checkpoint);db.execute('CREATE TABLE IF NOT EXISTS hashes(key TEXT PRIMARY KEY,sha TEXT)')
@@ -27,11 +35,22 @@ def audit(folder,checkpoint,library=None,progress=lambda s:None):
         with db:db.execute('INSERT OR REPLACE INTO hashes VALUES(?,?)',(key,sha))
         return sha
     try:
+        expanded = members = 0
         for i,p in enumerate(archives):
             progress(f'索引 {i+1}/{len(archives)} {p.name}')
             try:
                 st=p.stat()
                 with zipfile.ZipFile(p) as z:
+                    entries = z.infolist()
+                    members += len(entries)
+                    expanded += sum(e.file_size for e in entries)
+                    if members > 500000 or expanded > 2 * 1024**4:
+                        raise ValueError('超過本批 ZIP 安全上限（50 萬項或 2 TiB）')
+                    for e in entries:
+                        if e.file_size > 64 * 1024**3 or e.file_size > 1000 * max(1,e.compress_size):
+                            raise ValueError('單檔解壓容量或壓縮比超過安全上限')
+                        if re.match(r'^[A-Za-z]:', e.filename) or e.filename.startswith('/') or '..' in PurePosixPath(e.filename).parts or chr(92) in e.filename:
+                            raise ValueError('不安全 ZIP 路徑')
                     names=Counter(x.filename for x in z.infolist())
                     for n,info in enumerate(z.infolist()):
                         progress(f"索引 {i+1}/{len(archives)} · {n+1}/{len(z.infolist())}")
