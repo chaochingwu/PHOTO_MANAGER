@@ -10,6 +10,7 @@ import os
 import sqlite3
 import uuid
 from pathlib import Path
+from contextlib import closing
 from datetime import datetime
 from catalog import Catalog
 from date_year import detect_year
@@ -77,7 +78,7 @@ def prepare(db,root,entries):
         data=dict(version=1,root=str(root),db=str(db),sid=sid,changes=changes,created=datetime.now().isoformat())
         # SQLite online backup preserves metadata in case of external corruption.
         backup=db.parent/(journal.stem+'.pre_'+uuid.uuid4().hex[:10]+'.sqlite')
-        with sqlite3.connect(backup) as dst:c.db.backup(dst)
+        with closing(sqlite3.connect(backup)) as dst:c.db.backup(dst)
         data['catalog_backup']=str(backup)
         _write_atomic(journal,data)
         return journal

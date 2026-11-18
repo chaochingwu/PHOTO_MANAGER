@@ -85,7 +85,7 @@ class BridgeTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'外部來源'):
                 validate(self.c,p,ext)
         dests,sources=choices(self.c.sources(),str(self.root),'',str(ext))
-        self.assertIn(str(self.root),dests);self.assertNotIn(str(self.root),sources)
+        self.assertIn(str(self.root.resolve()),dests);self.assertNotIn(str(self.root.resolve()),sources)
     def test_multiple_organize_sessions_not_blocked_by_backups(self):
         a=self.photo('PHOTOS/a.JPG','red');self.indexed();pid=self.row('PHOTOS/a.JPG')['id'];self.c.set_favorite([pid])
         b=self.root/'PHOTOS/b.JPG';c=self.root/'PHOTOS/c.JPG'

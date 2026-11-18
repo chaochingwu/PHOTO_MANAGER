@@ -65,7 +65,7 @@ def execute_moves(root, entries, log=print, stop=lambda:None):
     journal.unlink()
 
 def run(root,scope='all',tasks=('screenshots','classify','rename'),partial='',log=print,stop=lambda:None,metadata=None,include_children=True,confirm_plan=None):
-    root=Path(root);journal=root/'.PHOTO_MANAGER'/'organize_pending.json'
+    root=Path(root).resolve();journal=root/'.PHOTO_MANAGER'/'organize_pending.json'
     if journal.exists():
         if scope=='partial':raise ValueError('有未完成的整理交易，請先使用原範圍復原；局部整理不會自動執行舊交易')
         execute_moves(root,[],log,stop);log('已完成前次中斷交易；請再次執行新設定');return
