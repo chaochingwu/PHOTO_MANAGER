@@ -36,7 +36,7 @@ jobs:
           name: PHOTO_MANAGER-Windows-integration
           path: v22/PHOTO_MANAGER-Windows.zip
       - name: Publish Windows prerelease
-        if: (github.event_name == 'workflow_dispatch' && inputs.publish) || contains(github.event.head_commit.message, '[beta.3]')
+        if: (github.event_name == 'workflow_dispatch' && inputs.publish) || contains(github.event.head_commit.message, '[beta.4]')
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create v2.2-beta.3 v22/PHOTO_MANAGER-Windows.zip --target "${{ github.sha }}" --prerelease --title "PHOTO_MANAGER V2.2 Beta 3" --notes "測試主庫可原地分類。預覽來源及目的地，確認後才搬移。完整同步仍鎖定。"
+        run: gh release create v2.2-beta.4 v22/PHOTO_MANAGER-Windows.zip --target "${{ github.sha }}" --prerelease --title "PHOTO_MANAGER V2.2 Beta 4" --notes "兩個工作區共用右上切換鍵，版權資訊集中於關於軟體。請複驗第 4 項。"

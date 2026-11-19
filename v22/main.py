@@ -1,7 +1,7 @@
 """RC3 viewer with the original Qt management center."""
 import sys
 from pathlib import Path
-from PySide6.QtWidgets import QApplication, QPushButton, QMessageBox, QStackedWidget
+from PySide6.QtWidgets import QApplication, QPushButton, QMessageBox, QStackedWidget, QWidget, QVBoxLayout, QHBoxLayout, QLabel
 from rc3 import Main
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "core"))
@@ -33,29 +33,48 @@ class ManagementCenter(Unified):
         super().start(action)
 
 
-class Workspace(QStackedWidget):
+class Workspace(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("PHOTO_MANAGER V2.2")
         self.resize(1450, 850)
         self.viewer = Main()
         self.center = None
-        self.addWidget(self.viewer)
-        button = QPushButton("照片庫管理中心")
-        self.viewer.address.parentWidget().layout().addWidget(button)
-        button.clicked.connect(self.open_center)
+        self.pages = QStackedWidget()
+        self.pages.addWidget(self.viewer)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        header = QHBoxLayout()
+        header.setContentsMargins(14, 5, 14, 5)
+        self.page_title = QLabel("照片工作室")
+        self.switch = QPushButton("照片庫管理中心")
+        self.switch.setFixedWidth(max(self.switch.sizeHint().width(), 132))
+        self.switch.clicked.connect(self.toggle_workspace)
+        header.addWidget(self.page_title)
+        header.addStretch()
+        header.addWidget(self.switch)
+        layout.addLayout(header)
+        layout.addWidget(self.pages)
+
+    def toggle_workspace(self):
+        if self.pages.currentWidget() is self.viewer:
+            self.open_center()
+        else:
+            self.pages.setCurrentWidget(self.viewer)
+            self.page_title.setText("照片工作室")
+            self.switch.setText("照片庫管理中心")
 
     def open_center(self):
         if self.center is None:
             center = ManagementCenter()
             center.setStyleSheet(STYLE)
             center.showpage("總覽")
-            back = QPushButton("返回照片工作室")
-            center.nav.layout().insertWidget(0, back)
-            back.clicked.connect(lambda: self.setCurrentWidget(self.viewer))
-            self.addWidget(center)
+            self.pages.addWidget(center)
             self.center = center
-        self.setCurrentWidget(self.center)
+        self.pages.setCurrentWidget(self.center)
+        self.page_title.setText("照片庫管理中心")
+        self.switch.setText("返回照片工作室")
 
     def closeEvent(self, event):
         if self.center is not None and not self.center.close():
@@ -71,7 +90,8 @@ if __name__ == "__main__":
     if "--smoke-test" in sys.argv:
         window.open_center()
         assert "照片庫管理" in window.center.pages
-        window.setCurrentWidget(window.viewer)
+        window.switch.click()
+        assert window.pages.currentWidget() is window.viewer
         sys.exit(0 if window.close() else 1)
     window.show()
     sys.exit(app.exec())
