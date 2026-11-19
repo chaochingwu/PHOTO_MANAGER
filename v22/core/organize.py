@@ -179,7 +179,7 @@ def run(root,scope='all',tasks=('screenshots','classify','rename'),partial='',lo
         if p not in activepaths:continue
         h=digests.get(p) or core.digest(p)
         folder=root/'截圖' if cat=='截圖' else root/cat/day[:4]/day[:7]/Path(*r['ev']) if 'classify' in tasks else p.parent
-        if cat=='截圖' or 'rename' in tasks or not core.FINAL.fullmatch(p.stem):
+        if cat=='截圖' or 'rename' in tasks:
             k=(cat,day);pk=pairkeys.get(p);n=pairnums.get(pk,0) if pk else 0
             if not n:n=max(nums.get(k,0),nums.get(('PHOTOS',day),0) if pk else 0,nums.get(('VIDEOS',day),0) if pk else 0)+1
             while True:
