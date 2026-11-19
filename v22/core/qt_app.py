@@ -108,7 +108,7 @@ class Window(QMainWindow):
         elif n=='同步照片庫':
             c,cl=card('同步照片庫');cl.addWidget(label('先在照片庫管理設定方向。完整同步會傳播刪除；單向備份、僅匯入及指定年份不傳播刪除。'));cl.addWidget(button('設定照片庫',lambda:self.showpage('照片庫管理')));b=button('同步照片庫',lambda:self.start('sync'),True);cl.addWidget(b);self.buttons.append(b);l.addWidget(c)
         elif n=='整理照片與影片':
-            c,cl=card('整理照片與影片');cl.addWidget(label('依拍攝日期分類、統一命名、照片與影片分開存放、刪除重複照片與影片。保護 Live Photo。'));cl.addWidget(label('處理範圍'));cl.addWidget(self.scope);cl.addWidget(self.partial);cl.addWidget(self.partial_refresh);cl.addWidget(self.partial_children);cl.addWidget(label('局部整理只選取指定來源；分類目的地可能在其他年份或類別，請核對預覽。'));cl.addWidget(label('處理項目'));[cl.addWidget(b) for b in self.taskboxes.values()];b=button('開始整理照片與影片',lambda:self.start('organize'),True);cl.addWidget(b);self.buttons.append(b);cl.addWidget(button('開啟 INBOX',self.open_inbox));cl.addWidget(button('返回簡易模式',lambda:self.toggle(initial=True) if not self.advanced else self.toggle()));l.addWidget(c)
+            c,cl=card('整理照片與影片');cl.addWidget(label('依拍攝日期分類、統一命名、照片與影片分開存放、刪除重複照片與影片。保護 Live Photo。'));cl.addWidget(label('處理範圍'));cl.addWidget(self.scope);cl.addWidget(self.partial);cl.addWidget(self.partial_refresh);cl.addWidget(self.partial_children);cl.addWidget(label('局部整理只選取指定來源；分類目的地可能在其他年份或類別，請核對預覽。'));cl.addWidget(label('處理項目'));[cl.addWidget(b) for b in self.taskboxes.values()];b=button('預覽整理照片與影片',lambda:self.start('organize'),True);cl.addWidget(b);self.buttons.append(b);cl.addWidget(button('開啟 INBOX',self.open_inbox));cl.addWidget(button('返回簡易模式',lambda:self.toggle(initial=True) if not self.advanced else self.toggle()));l.addWidget(c)
         elif n=='照片庫管理':
             self.pathholder=QVBoxLayout();l.addLayout(self.pathholder);l.addWidget(button('開啟目前照片庫',lambda:self.open_path(self.paths[0].text())))
         elif n=='使用說明':
@@ -218,13 +218,16 @@ class Window(QMainWindow):
                 paths_ok([root]+[Path(p).resolve() for p,m,y in targets])
             if a=='sync' and not targets:raise ValueError('請設定同步庫')
         except Exception as e:QMessageBox.warning(self,'設定錯誤',str(e));return
-        if QMessageBox.question(self,'確認操作','此版本仍為候選版，請使用測試複本。重複檔案移至復原區。請先保留獨立備份。是否開始？')!=QMessageBox.StandardButton.Yes:return
+        if QMessageBox.question(self,'確認操作','請使用測試照片庫。是否開始掃描？整理會先顯示逐檔目的地，確認後才搬移。')!=QMessageBox.StandardButton.Yes:return
         self.save();self.busy=True;self.stop.clear();self.pause.clear();self.started=time.monotonic();self.out.clear();self.progress.setRange(0,0);self.status.setText('執行中');self.pausebtn.setEnabled(True);self.stopbtn.setEnabled(True);[b.setEnabled(False) for b in self.buttons];scope=['inbox','all','partial'][self.scope.currentIndex()];partial=self.partial.currentData() or '';include_children=self.partial_children.isChecked();tasks=tuple(k for k,b in self.taskboxes.items() if b.isChecked())
         def worker():
             lines=[];status='完成'
             def log(s):lines.append(str(s));self.q.put(('log',str(s)))
             try:
                 if a=='organize':
+                    from capacity import inspect, MODES
+                    preflight=inspect(root,None,MODES[0],lambda:self.stop.is_set())
+                    if preflight['issues']:raise ValueError('；'.join(preflight['issues']))
                     if not tasks:raise ValueError('請選擇處理項目')
                     def confirm(entries,count):
                         event=threading.Event();answer=[]
@@ -286,7 +289,7 @@ class Window(QMainWindow):
             elif k=='plan':
                 entries,count,event,answer=v
                 try:
-                    changed=[(p,d) for p,d,h in entries if p!=d];dialog=QDialog(self);dialog.setWindowTitle('局部整理預覽');dialog.resize(900,550);layout=QVBoxLayout(dialog);layout.addWidget(label(f'選定來源 {count} 個媒體；預計搬移／改名／復原區 {len(changed)} 筆。請核對目的地，可能跨年份或類別。'));view=QPlainTextEdit('\n'.join(f'{p} → {d}' for p,d in changed[:2000]));view.setReadOnly(True);layout.addWidget(view);layout.addWidget(label('最多顯示前 2000 筆；超過此數量請縮小整理範圍後再執行。'));buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Ok|QDialogButtonBox.StandardButton.Cancel);buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(len(changed)<=2000);buttons.accepted.connect(dialog.accept);buttons.rejected.connect(dialog.reject);layout.addWidget(buttons);answer.append(dialog.exec()==QDialog.DialogCode.Accepted and not self.stop.is_set())
+                    changed=[(p,d) for p,d,h in entries if p!=d];dialog=QDialog(self);dialog.setWindowTitle('整理差異預覽');dialog.resize(900,550);layout=QVBoxLayout(dialog);layout.addWidget(label(f'選定來源 {count} 個媒體；預計搬移／改名／復原區 {len(changed)} 筆。請核對目的地，可能跨年份或類別。'));view=QPlainTextEdit('\n'.join(f'{p} → {d}' for p,d in changed[:2000]));view.setReadOnly(True);layout.addWidget(view);layout.addWidget(label('最多顯示前 2000 筆；超過此數量請縮小整理範圍後再執行。'));buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Ok|QDialogButtonBox.StandardButton.Cancel);buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(len(changed)<=2000);buttons.accepted.connect(dialog.accept);buttons.rejected.connect(dialog.reject);layout.addWidget(buttons);answer.append(dialog.exec()==QDialog.DialogCode.Accepted and not self.stop.is_set())
                 finally:event.set()
             else:
                 self.busy=False;self.status.setText(v[0]);self.report=v[1];self.progress.setRange(0,100);self.progress.setValue(100 if v[0]=='完成' else 0);self.pausebtn.setEnabled(False);self.stopbtn.setEnabled(False);self.pausebtn.setText('暫停');[b.setEnabled(True) for b in self.buttons];self.refresh()

@@ -106,4 +106,22 @@ class BridgeTests(unittest.TestCase):
         self.assertIsNone(self.row('PHOTOS/a.JPG'))
         self.assertTrue(target.is_file())
 
+    def test_root_media_preview_cancel_then_classify(self):
+        from organize import run
+        photo=self.photo('sample.jpg','blue')
+        video=self.root/'clip.mov'
+        video.write_bytes(b'test video')
+        originals={p:p.read_bytes() for p in (photo,video)}
+        def preview(entries,count):
+            self.assertEqual(count,2)
+            self.assertEqual({d.relative_to(self.root.resolve()).parts[0] for _,d,_ in entries},{'PHOTOS','VIDEOS'})
+            return False
+        options=dict(scope='all',tasks=('classify',),metadata=lambda *_:{},log=lambda *_:None)
+        self.assertFalse(run(self.root,confirm_plan=preview,**options))
+        self.assertTrue(all(p.read_bytes()==data for p,data in originals.items()))
+        self.assertTrue(run(self.root,confirm_plan=lambda *_:True,**options))
+        for p,data in originals.items():
+            self.assertFalse(p.exists())
+            self.assertEqual(next(self.root.rglob(p.name)).read_bytes(),data)
+
 if __name__=='__main__':unittest.main()

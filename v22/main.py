@@ -11,12 +11,24 @@ from qt_unified import Unified, STYLE
 class ManagementCenter(Unified):
     def __init__(self):
         super().__init__()
+        self.scope.setCurrentIndex(1)
+        for key, box in self.taskboxes.items():
+            box.setChecked(key == "classify")
+        self.taskboxes["duplicates"].setEnabled(False)
         from capacity_page import CapacityPage
         self.add_page("容量預檢與備份",CapacityPage(self),1,"SP_DriveHDIcon")
 
     def start(self, action):
-        if action in {"sync", "organize"}:
-            QMessageBox.information(self, "開發版安全鎖", "整理與同步等待完整預覽及衝突檢查驗證。")
+        if action == "organize":
+            root = Path(self.paths[0].text())
+            if not (root / ".PHOTO_MANAGER/identity.json").is_file():
+                QMessageBox.warning(self, "選取測試主庫", "請先到照片庫管理選擇已初始化的測試主庫。")
+                return
+            if (root / ".PHOTO_MANAGER/organize_pending.json").exists():
+                QMessageBox.warning(self, "整理尚未完成", "請先復原先前的整理交易。")
+                return
+        if action == "sync":
+            QMessageBox.information(self, "開發版安全鎖", "完整同步尚待驗證。")
             return
         super().start(action)
 
